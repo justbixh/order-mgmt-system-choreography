@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order Flow Map</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: one long reading column; four diagrams (map, happy path, failures, inside one service) from outside in. */
+:root {
+  --bg: #f4f6f9; --surface: #ffffff; --fg: #141a23; --muted: #5a6575; --line: #d8dee8;
+  --order: #2764e0; --inv: #0f8a69; --pay: #b86e00; --notif: #7d49d1; --bad: #c4402b;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-head: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1218; --surface: #161b23; --fg: #e8ecf2; --muted: #9aa5b5; --line: #2a313c;
+    --order: #6e9cff; --inv: #3fc9a3; --pay: #eaaa3f; --notif: #b595f3; --bad: #f0806d; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1218; --surface: #161b23; --fg: #e8ecf2; --muted: #9aa5b5; --line: #2a313c;
+  --order: #6e9cff; --inv: #3fc9a3; --pay: #eaaa3f; --notif: #b595f3; --bad: #f0806d; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  padding-block: 40px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+main { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 48px; }
+h1, h2, h3 { font-family: var(--font-head); line-height: 1.2; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(30px, 5vw, 44px); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+h3 { font-size: 16px; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+.lede { font-size: 17px; color: var(--muted); }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+code, .mono { font-family: var(--font-mono); font-size: 0.88em; }
+section { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.ideas { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.idea { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.idea p { font-size: 14px; color: var(--muted); }
+
+.diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; overflow-x: auto; }
+.diagram svg { display: block; width: 100%; min-width: 760px; height: auto; }
+.caption { font-size: 13px; color: var(--muted); }
+
+/* SVG styling: every colour comes from tokens so both themes work. */
+svg text { font-family: var(--font-body); fill: var(--fg); }
+svg .ttl { font: 600 16px var(--font-head); }
+svg .sub { font-size: 12px; fill: var(--muted); }
+svg .tiny { font-size: 11px; fill: var(--muted); }
+svg .mono { font-family: var(--font-mono); }
+svg .ev { font: 600 12px var(--font-mono); }
+svg .note { font-size: 11px; fill: var(--muted); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+svg .lbl { paint-order: stroke; stroke: var(--surface); stroke-width: 5px; stroke-linejoin: round; }
+.o { --c: var(--order); } .i { --c: var(--inv); } .p { --c: var(--pay); } .n { --c: var(--notif); } .m { --c: var(--muted); } .b { --c: var(--bad); }
+svg .card { fill: color-mix(in srgb, var(--c) 9%, var(--surface)); stroke: var(--c); stroke-width: 1.5; }
+svg .chip { fill: color-mix(in srgb, var(--c) 16%, var(--surface)); stroke: color-mix(in srgb, var(--c) 55%, var(--surface)); stroke-width: 1; }
+svg .plain { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+svg .band { fill: color-mix(in srgb, var(--muted) 7%, var(--surface)); stroke: var(--line); stroke-width: 1.5; }
+svg .cx { stroke: var(--c); }
+svg .arr { stroke: var(--c); stroke-width: 2; fill: none; }
+svg .dash { stroke: var(--c); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+svg .life { stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 4 5; }
+svg .dot { fill: var(--c); }
+svg .num { fill: var(--c); font: 600 12px var(--font-head); text-anchor: middle; }
+svg .numtxt { fill: var(--surface); font: 700 12px var(--font-head); text-anchor: middle; }
+svg .c-txt { fill: var(--c); }
+
+/* Failure cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.fcard { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.fcard header { display: flex; flex-direction: column; gap: 2px; }
+.fcard header span { font-size: 13px; color: var(--muted); }
+.steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.steps li { display: grid; grid-template-columns: 12px 1fr; gap: 10px; align-items: start; font-size: 14px; }
+.steps li::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-top: 6px; }
+.steps li.o { --c: var(--order); } .steps li.i { --c: var(--inv); } .steps li.p { --c: var(--pay); } .steps li.n { --c: var(--notif); } .steps li.b { --c: var(--bad); }
+.steps b { font-weight: 600; }
+.steps code { background: color-mix(in srgb, var(--c) 14%, var(--surface)); padding: 1px 6px; border-radius: 4px; }
+.callout { background: color-mix(in srgb, var(--order) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--order) 35%, var(--surface)); border-radius: 10px; padding: 14px 16px; font-size: 14px; max-width: none; }
+
+/* Module list + commands */
+.mods { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.mod { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mod .mono { font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
+.mod span:last-child { font-size: 13px; color: var(--muted); }
+pre { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-family: var(--font-mono); font-size: 13px; line-height: 1.7; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+
+<main>
+  <header style="display:flex;flex-direction:column;gap:12px">
+    <span class="eyebrow">Event-driven order management</span>
+    <h1>How an order moves through the system</h1>
+    <p class="lede">Four small services place, stock, pay for and announce an order. They never call each other. They only publish events to Kafka and react to the events they care about.</p>
+    <div class="legend" aria-label="Colour key">
+      <span><i style="background:var(--order)"></i>Order Service</span>
+      <span><i style="background:var(--inv)"></i>Inventory Service</span>
+      <span><i style="background:var(--pay)"></i>Payment Service</span>
+      <span><i style="background:var(--notif)"></i>Notification Service</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="ideas">
+      <div class="idea"><h3>No central boss</h3><p>Each service reacts to events and publishes new ones. Nobody orchestrates the order. This style is called saga choreography.</p></div>
+      <div class="idea"><h3>One database each</h3><p>Order, inventory, payment and notification data live in four separate PostgreSQL databases. The only shared thing is the event stream.</p></div>
+      <div class="idea"><h3>Failures are events too</h3><p>"Out of stock" and "card declined" are normal business outcomes, so they travel as events. A crashed gateway is a technical failure and goes through retries.</p></div>
+    </div>
+  </section>
+
+  <!-- ============================ 1. BIG PICTURE ============================ -->
+  <section>
+    <span class="eyebrow">Diagram 1 · The big picture</span>
+    <h2>Who talks to whom</h2>
+    <p>A client only ever talks to the Order Service over HTTP. Everything after that happens on three Kafka topics, one per producing service.</p>
+    <div class="diagram">
+      <svg viewBox="0 0 960 520" role="img" aria-label="Architecture: client calls the Order Service; four services publish to and consume from three Kafka topics; PostgreSQL, Kafka UI and Jaeger support them.">
+        <defs>
+          <marker id="a-o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--order)"/></marker>
+          <marker id="a-i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--inv)"/></marker>
+          <marker id="a-p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--pay)"/></marker>
+          <marker id="a-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--notif)"/></marker>
+          <marker id="a-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--muted)"/></marker>
+          <marker id="a-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--bad)"/></marker>
+        </defs>
+
+        <!-- client -->
+        <g class="m"><rect class="plain" x="40" y="12" width="200" height="34" rx="17"/></g>
+        <text x="140" y="34" text-anchor="middle" class="sub">Client · curl / scripts/demo.sh</text>
+        <path class="arr m" d="M140 46 V82" marker-end="url(#a-m)"/>
+        <text x="152" y="70" class="ev" style="fill:var(--muted)">POST /orders</text>
+
+        <!-- order -->
+        <g class="o">
+          <rect class="card" x="40" y="84" width="200" height="150" rx="12"/>
+          <text x="56" y="110" class="ttl">Order Service</text>
+          <text x="56" y="128" class="sub mono">:8081</text>
+          <text x="56" y="148" class="sub">Orders and their status</text>
+          <rect class="chip" x="54" y="160" width="172" height="22" rx="6"/>
+          <text x="64" y="175" class="tiny mono">orders DB + outbox</text>
+          <text x="56" y="203" class="tiny c-txt" style="font-weight:600">publishes → order-events</text>
+          <text x="56" y="221" class="tiny">listens ← inventory, payment</text>
+        </g>
+        <!-- inventory -->
+        <g class="i">
+          <rect class="card" x="280" y="84" width="200" height="150" rx="12"/>
+          <text x="296" y="110" class="ttl">Inventory Service</text>
+          <text x="296" y="128" class="sub mono">:8082</text>
+          <text x="296" y="148" class="sub">Stock and reservations</text>
+          <rect class="chip" x="294" y="160" width="172" height="22" rx="6"/>
+          <text x="304" y="175" class="tiny mono">inventory DB + outbox</text>
+          <text x="296" y="203" class="tiny c-txt" style="font-weight:600">publishes → inventory-events</text>
+          <text x="296" y="221" class="tiny">listens ← order, payment</text>
+        </g>
+        <!-- payment -->
+        <g class="p">
+          <rect class="card" x="520" y="84" width="200" height="150" rx="12"/>
+          <text x="536" y="110" class="ttl">Payment Service</text>
+          <text x="536" y="128" class="sub mono">:8083</text>
+          <text x="536" y="148" class="sub">Charges and refunds</text>
+          <rect class="chip" x="534" y="160" width="172" height="22" rx="6"/>
+          <text x="544" y="175" class="tiny mono">payments DB + outbox</text>
+          <text x="536" y="203" class="tiny c-txt" style="font-weight:600">publishes → payment-events</text>
+          <text x="536" y="221" class="tiny">listens ← inventory, order</text>
+        </g>
+        <!-- notification -->
+        <g class="n">
+          <rect class="card" x="760" y="84" width="200" height="150" rx="12"/>
+          <text x="776" y="110" class="ttl">Notification Service</text>
+          <text x="776" y="128" class="sub mono">:8084</text>
+          <text x="776" y="148" class="sub">Messages to the customer</text>
+          <rect class="chip" x="774" y="160" width="172" height="22" rx="6"/>
+          <text x="784" y="175" class="tiny mono">notifications DB</text>
+          <text x="776" y="203" class="tiny c-txt" style="font-weight:600">publishes → nothing</text>
+          <text x="776" y="221" class="tiny">listens ← order-events</text>
+        </g>
+
+        <!-- publish (colour) and consume (grey) arrows -->
+        <path class="arr o" d="M100 234 V288" marker-end="url(#a-o)"/>
+        <path class="arr m" d="M180 288 V236" marker-end="url(#a-m)"/>
+        <path class="arr i" d="M340 234 V288" marker-end="url(#a-i)"/>
+        <path class="arr m" d="M420 288 V236" marker-end="url(#a-m)"/>
+        <path class="arr p" d="M580 234 V288" marker-end="url(#a-p)"/>
+        <path class="arr m" d="M660 288 V236" marker-end="url(#a-m)"/>
+        <path class="arr m" d="M900 288 V236" marker-end="url(#a-m)"/>
+
+        <!-- Kafka band -->
+        <rect class="band" x="40" y="290" width="920" height="132" rx="12"/>
+        <text x="56" y="311" class="ttl" style="font-size:14px">Apache Kafka</text>
+        <text x="944" y="311" text-anchor="end" class="tiny">3 partitions per topic, keyed by orderId · failed messages are parked on &lt;topic&gt;.DLT</text>
+        <g class="o"><rect class="chip" x="56" y="320" width="888" height="26" rx="6"/></g>
+        <text x="68" y="338" class="ev c-txt" style="fill:var(--order)">order-events</text>
+        <text x="936" y="338" text-anchor="end" class="tiny">OrderCreated · OrderConfirmed · OrderCancelled</text>
+        <g class="i"><rect class="chip" x="56" y="352" width="888" height="26" rx="6"/></g>
+        <text x="68" y="370" class="ev" style="fill:var(--inv)">inventory-events</text>
+        <text x="936" y="370" text-anchor="end" class="tiny">InventoryReserved · ReservationFailed · ReservationExpired · InventoryReleased</text>
+        <g class="p"><rect class="chip" x="56" y="384" width="888" height="26" rx="6"/></g>
+        <text x="68" y="402" class="ev" style="fill:var(--pay)">payment-events</text>
+        <text x="936" y="402" text-anchor="end" class="tiny">PaymentSucceeded · PaymentFailed · PaymentRefunded</text>
+
+        <!-- supporting infra -->
+        <rect class="plain" x="40" y="444" width="330" height="32" rx="8"/>
+        <text x="56" y="465" class="sub">PostgreSQL :5432 · one database and login per service</text>
+        <rect class="plain" x="390" y="444" width="250" height="32" rx="8"/>
+        <text x="406" y="465" class="sub">Kafka UI :8090 · browse topics, DLT</text>
+        <rect class="plain" x="660" y="444" width="300" height="32" rx="8"/>
+        <text x="676" y="465" class="sub">Jaeger :16686 · one trace follows an order</text>
+
+        <text x="40" y="505" class="tiny">Coloured arrow ▼ = service publishes an event (written to its outbox table first).   Grey arrow ▲ = service consumes events from the topics listed in its box.</text>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ============================ 2. HAPPY PATH ============================ -->
+  <section>
+    <span class="eyebrow">Diagram 2 · The happy path</span>
+    <h2>One order, from request to confirmation</h2>
+    <p>This is the order of events when everything works (payment token <code>tok_success</code>). Each arrow is an event on a Kafka topic, not a direct call.</p>
+    <div class="diagram">
+      <svg viewBox="0 0 960 520" role="img" aria-label="Sequence diagram of a successful order: POST, OrderCreated, InventoryReserved, PaymentSucceeded, OrderConfirmed.">
+        <defs>
+          <marker id="s-o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--order)"/></marker>
+          <marker id="s-i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--inv)"/></marker>
+          <marker id="s-p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--pay)"/></marker>
+          <marker id="s-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--muted)"/></marker>
+        </defs>
+
+        <!-- lifelines -->
+        <path class="life" d="M100 46 V510"/><path class="life" d="M290 46 V510"/><path class="life" d="M490 46 V510"/><path class="life" d="M690 46 V510"/><path class="life" d="M860 46 V510"/>
+        <g class="m"><rect class="plain" x="45" y="10" width="110" height="36" rx="8"/></g>
+        <text x="100" y="33" text-anchor="middle" class="ttl" style="font-size:14px">Client</text>
+        <g class="o"><rect class="card" x="225" y="10" width="130" height="36" rx="8"/></g>
+        <text x="290" y="33" text-anchor="middle" class="ttl" style="font-size:14px">Order</text>
+        <g class="i"><rect class="card" x="425" y="10" width="130" height="36" rx="8"/></g>
+        <text x="490" y="33" text-anchor="middle" class="ttl" style="font-size:14px">Inventory</text>
+        <g class="p"><rect class="card" x="625" y="10" width="130" height="36" rx="8"/></g>
+        <text x="690" y="33" text-anchor="middle" class="ttl" style="font-size:14px">Payment</text>
+        <g class="n"><rect class="card" x="795" y="10" width="130" height="36" rx="8"/></g>
+        <text x="860" y="33" text-anchor="middle" class="ttl" style="font-size:14px">Notification</text>
+
+        <!-- step 1 -->
+        <g class="m"><circle class="dot" cx="24" cy="100" r="11"/></g><text x="24" y="104" class="numtxt">1</text>
+        <path class="arr m" d="M100 100 H288" marker-end="url(#s-m)"/>
+        <text x="195" y="92" text-anchor="middle" class="ev lbl">POST /orders</text>
+        <text x="195" y="116" text-anchor="middle" class="tiny lbl">HTTP request</text>
+        <text x="300" y="132" class="note">saves order as PENDING +</text>
+        <text x="300" y="146" class="note">OrderCreated in outbox (1 transaction)</text>
+
+        <!-- step 2 -->
+        <g class="o"><circle class="dot" cx="24" cy="200" r="11"/></g><text x="24" y="204" class="numtxt">2</text>
+        <path class="arr o" d="M290 200 H488" marker-end="url(#s-o)"/>
+        <text x="390" y="190" text-anchor="middle" class="ev lbl" style="fill:var(--order)">OrderCreated</text>
+        <text x="390" y="217" text-anchor="middle" class="tiny lbl">order-events</text>
+        <text x="500" y="234" class="note">reserves the stock,</text>
+        <text x="500" y="248" class="note">writes InventoryReserved</text>
+
+        <!-- step 3 -->
+        <g class="i"><circle class="dot" cx="24" cy="300" r="11"/></g><text x="24" y="304" class="numtxt">3</text>
+        <path class="arr i" d="M490 300 H688" marker-end="url(#s-i)"/>
+        <text x="590" y="290" text-anchor="middle" class="ev lbl" style="fill:var(--inv)">InventoryReserved</text>
+        <text x="590" y="317" text-anchor="middle" class="tiny lbl">inventory-events</text>
+        <text x="700" y="334" class="note">charges the card (mock gateway),</text>
+        <text x="700" y="348" class="note">writes PaymentSucceeded</text>
+
+        <!-- step 4 -->
+        <g class="p"><circle class="dot" cx="24" cy="400" r="11"/></g><text x="24" y="404" class="numtxt">4</text>
+        <path class="arr p" d="M690 400 H292" marker-end="url(#s-p)"/>
+        <text x="590" y="390" text-anchor="middle" class="ev lbl" style="fill:var(--pay)">PaymentSucceeded</text>
+        <text x="590" y="417" text-anchor="middle" class="tiny lbl">payment-events</text>
+        <text x="300" y="434" class="note">marks order CONFIRMED,</text>
+        <text x="300" y="448" class="note">writes OrderConfirmed</text>
+        <text x="500" y="434" class="note">Inventory also hears it:</text>
+        <text x="500" y="448" class="note">the reservation becomes permanent</text>
+
+        <!-- step 5 -->
+        <g class="o"><circle class="dot" cx="24" cy="480" r="11"/></g><text x="24" y="484" class="numtxt">5</text>
+        <path class="arr o" d="M290 480 H858" marker-end="url(#s-o)"/>
+        <text x="575" y="472" text-anchor="middle" class="ev lbl" style="fill:var(--order)">OrderConfirmed</text>
+        <text x="575" y="497" text-anchor="middle" class="tiny lbl">order-events</text>
+      </svg>
+    </div>
+    <p class="caption">After step 5 the Notification Service logs a "your order is confirmed" message. Every arrow passes through Kafka: the sender writes the event to its outbox table, and the receiver reads it from the topic.</p>
+  </section>
+
+  <!-- ============================ 3. FAILURES ============================ -->
+  <section>
+    <span class="eyebrow">Diagram 3 · When things go wrong</span>
+    <h2>Compensation: undoing what already happened</h2>
+    <p>You cannot roll back across four databases, so the system undoes work with more events. One rule keeps it simple: <code>OrderCancelled</code> is the only compensation trigger. Whoever holds something for that order (stock, money) releases it when they see it.</p>
+    <div class="cards">
+      <article class="fcard">
+        <header><h3>Out of stock</h3><span>Order more items than exist</span></header>
+        <ol class="steps">
+          <li class="o"><span><b>Order</b> publishes <code>OrderCreated</code></span></li>
+          <li class="i"><span><b>Inventory</b> cannot reserve, publishes <code>InventoryReservationFailed</code></span></li>
+          <li class="o"><span><b>Order</b> cancels the order, publishes <code>OrderCancelled</code></span></li>
+          <li class="n"><span><b>Notification</b> tells the customer. Nothing was charged, so there is nothing to refund.</span></li>
+        </ol>
+      </article>
+      <article class="fcard">
+        <header><h3>Card declined</h3><span>Payment token <code>tok_declined</code> or <code>tok_insufficient_funds</code></span></header>
+        <ol class="steps">
+          <li class="i"><span><b>Inventory</b> reserved the stock: <code>InventoryReserved</code></span></li>
+          <li class="p"><span><b>Payment</b> is declined, publishes <code>PaymentFailed</code></span></li>
+          <li class="o"><span><b>Order</b> cancels, publishes <code>OrderCancelled</code></span></li>
+          <li class="i"><span><b>Inventory</b> releases the reserved stock: <code>InventoryReleased</code></span></li>
+          <li class="n"><span><b>Notification</b> tells the customer.</span></li>
+        </ol>
+      </article>
+      <article class="fcard">
+        <header><h3>Reservation expires</h3><span>Stock is held but no payment ever arrives</span></header>
+        <ol class="steps">
+          <li class="i"><span><b>Inventory</b>'s expiry job finds a reservation older than the TTL (default 2 minutes) and publishes <code>InventoryReservationExpired</code></span></li>
+          <li class="o"><span><b>Order</b> cancels, publishes <code>OrderCancelled</code></span></li>
+          <li class="i"><span><b>Inventory</b> releases the stock for good.</span></li>
+        </ol>
+      </article>
+      <article class="fcard">
+        <header><h3>Paid order is cancelled</h3><span>Money has already been taken</span></header>
+        <ol class="steps">
+          <li class="o"><span><b>Order</b> publishes <code>OrderCancelled</code></span></li>
+          <li class="p"><span><b>Payment</b> sees it and refunds: <code>PaymentRefunded</code></span></li>
+          <li class="i"><span><b>Inventory</b> releases the stock: <code>InventoryReleased</code></span></li>
+        </ol>
+      </article>
+      <article class="fcard">
+        <header><h3>Gateway outage</h3><span>Payment token <code>tok_gateway_error</code></span></header>
+        <ol class="steps">
+          <li class="p"><span><b>Payment</b> cannot reach the gateway. This is a technical failure, so it throws instead of publishing an event.</span></li>
+          <li class="b"><span>The consumer retries with backoff.</span></li>
+          <li class="b"><span>If it still fails, the message is parked on <code>payment-events.DLT</code> to inspect in Kafka UI.</span></li>
+        </ol>
+      </article>
+    </div>
+    <p class="callout"><b>Why handlers check the order's current status first.</b> Kafka can deliver an event twice, late, or across topics in a different order than it was produced. A handler that is told "payment succeeded" for an order that is already cancelled must not resurrect it.</p>
+  </section>
+
+  <!-- ============================ 4. INSIDE A SERVICE ============================ -->
+  <section>
+    <span class="eyebrow">Diagram 4 · Inside one service</span>
+    <h2>How events leave and enter safely</h2>
+    <p>The shared <code>messaging-support</code> library gives every service the same plumbing, so the events never get lost or processed twice.</p>
+    <div class="diagram">
+      <svg viewBox="0 0 960 400" role="img" aria-label="Publishing through the transactional outbox, consuming through the idempotent processor, and the retry and dead-letter path.">
+        <defs>
+          <marker id="k-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--muted)"/></marker>
+          <marker id="k-o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--order)"/></marker>
+          <marker id="k-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--bad)"/></marker>
+        </defs>
+
+        <!-- Publishing row -->
+        <text x="30" y="26" class="ttl" style="font-size:14px">Publishing: the outbox</text>
+        <text x="190" y="26" class="tiny">Never write to the database and to Kafka separately. One of them could fail and they would disagree.</text>
+
+        <g class="m"><rect class="plain" x="30" y="44" width="170" height="72" rx="10"/></g>
+        <text x="46" y="70" class="ttl" style="font-size:14px">Business logic</text>
+        <text x="46" y="88" class="sub">REST call or event handler</text>
+        <text x="46" y="103" class="sub">decides something happened</text>
+
+        <g class="o"><rect class="card" x="240" y="44" width="250" height="72" rx="10"/></g>
+        <text x="256" y="70" class="ttl" style="font-size:14px">One database transaction</text>
+        <text x="256" y="88" class="sub">saves the business row AND an</text>
+        <text x="256" y="103" class="sub">outbox row (OutboxService). Both or neither.</text>
+
+        <g class="m"><rect class="plain" x="530" y="44" width="200" height="72" rx="10"/></g>
+        <text x="546" y="70" class="ttl" style="font-size:14px">OutboxPublisher</text>
+        <text x="546" y="88" class="sub">polls every 500 ms, FOR UPDATE</text>
+        <text x="546" y="103" class="sub">SKIP LOCKED, keeps traceparent</text>
+
+        <g class="m"><rect class="plain" x="770" y="44" width="160" height="72" rx="10"/></g>
+        <text x="786" y="70" class="ttl" style="font-size:14px">Kafka topic</text>
+        <text x="786" y="88" class="sub">keyed by orderId, so one</text>
+        <text x="786" y="103" class="sub">order stays in order</text>
+
+        <path class="arr m" d="M200 80 H238" marker-end="url(#k-m)"/>
+        <path class="arr m" d="M490 80 H528" marker-end="url(#k-m)"/>
+        <path class="arr m" d="M730 80 H768" marker-end="url(#k-m)"/>
+
+        <!-- Consuming row -->
+        <text x="30" y="166" class="ttl" style="font-size:14px">Consuming: the idempotent consumer</text>
+        <text x="320" y="166" class="tiny">Kafka may deliver the same event twice. Handling it twice must be harmless.</text>
+
+        <g class="m"><rect class="plain" x="30" y="184" width="80" height="72" rx="10"/></g>
+        <text x="70" y="226" text-anchor="middle" class="ttl" style="font-size:14px">Kafka</text>
+
+        <g class="m"><rect class="plain" x="140" y="184" width="140" height="72" rx="10"/></g>
+        <text x="154" y="210" class="ttl" style="font-size:14px">@KafkaListener</text>
+        <text x="154" y="228" class="sub">manual acknowledge</text>
+        <text x="154" y="243" class="sub">(ack after success)</text>
+
+        <g class="m"><rect class="plain" x="310" y="184" width="150" height="72" rx="10"/></g>
+        <text x="324" y="210" class="ttl" style="font-size:14px">EventDispatcher</text>
+        <text x="324" y="228" class="sub">parses the envelope,</text>
+        <text x="324" y="243" class="sub">sets logging context</text>
+
+        <g class="o"><rect class="card" x="490" y="184" width="210" height="72" rx="10"/></g>
+        <text x="504" y="210" class="ttl" style="font-size:14px">IdempotentEventProcessor</text>
+        <text x="504" y="228" class="sub">records the event id and runs</text>
+        <text x="504" y="243" class="sub">the handler in one transaction</text>
+
+        <g class="m"><rect class="plain" x="730" y="184" width="130" height="72" rx="10"/></g>
+        <text x="744" y="210" class="ttl" style="font-size:14px">Handler</text>
+        <text x="744" y="228" class="sub">switch on the</text>
+        <text x="744" y="243" class="sub">payload type</text>
+
+        <g class="m"><rect class="plain" x="880" y="184" width="50" height="72" rx="10"/></g>
+        <text x="905" y="226" text-anchor="middle" class="ttl" style="font-size:14px">ack</text>
+
+        <path class="arr m" d="M110 220 H138" marker-end="url(#k-m)"/>
+        <path class="arr m" d="M280 220 H308" marker-end="url(#k-m)"/>
+        <path class="arr m" d="M460 220 H488" marker-end="url(#k-m)"/>
+        <path class="arr m" d="M700 220 H728" marker-end="url(#k-m)"/>
+        <path class="arr m" d="M860 220 H878" marker-end="url(#k-m)"/>
+
+        <!-- Failure row -->
+        <text x="30" y="306" class="ttl" style="font-size:14px">When the handler throws</text>
+        <path class="dash b" d="M795 256 V282 H220 V316" marker-end="url(#k-b)"/>
+        <text x="520" y="276" class="tiny lbl" style="fill:var(--bad)">technical failure</text>
+
+        <g class="b"><rect class="card" x="130" y="318" width="180" height="56" rx="10"/></g>
+        <text x="146" y="342" class="ttl" style="font-size:14px">Not acknowledged</text>
+        <text x="146" y="360" class="sub">the offset is not committed</text>
+
+        <g class="b"><rect class="card" x="350" y="318" width="200" height="56" rx="10"/></g>
+        <text x="366" y="342" class="ttl" style="font-size:14px">Retry with backoff</text>
+        <text x="366" y="360" class="sub">KafkaErrorHandlingConfig</text>
+
+        <g class="b"><rect class="card" x="590" y="318" width="260" height="56" rx="10"/></g>
+        <text x="606" y="342" class="ttl" style="font-size:14px">&lt;topic&gt;.DLT (dead letter)</text>
+        <text x="606" y="360" class="sub">parked for a human, 1 partition</text>
+
+        <path class="arr b" d="M310 346 H348" marker-end="url(#k-b)"/>
+        <path class="arr b" d="M550 346 H588" marker-end="url(#k-b)"/>
+      </svg>
+    </div>
+    <p class="caption">Business failures such as a declined card never reach the red path. They are published as ordinary events (<code>PaymentFailed</code>) and the handler finishes normally.</p>
+  </section>
+
+  <!-- ============================ 5. CODE MAP ============================ -->
+  <section>
+    <span class="eyebrow">Where to look in the repo</span>
+    <h2>Seven standalone Maven modules</h2>
+    <p>There is no parent pom. Each module builds on its own, and the shared libraries must be installed first.</p>
+    <div class="mods">
+      <div class="mod"><span class="mono">events-contract</span><span>The wire format. <code>EventType</code> maps each event to its topic and payload class.</span></div>
+      <div class="mod"><span class="mono">messaging-support</span><span>Outbox, publisher, idempotent processor, dispatcher, retry and DLT config.</span></div>
+      <div class="mod"><span class="mono">testing-support</span><span>Testcontainers (Postgres, Kafka) and a small Kafka test client.</span></div>
+      <div class="mod"><span class="mono">order-service</span><span><code>OrderSagaHandler</code> decides confirm or cancel from the events it hears.</span></div>
+      <div class="mod"><span class="mono">inventory-service</span><span><code>ReservationService</code> reserves, commits and releases stock.</span></div>
+      <div class="mod"><span class="mono">payment-service</span><span>Charges through a mock gateway and refunds on cancellation.</span></div>
+      <div class="mod"><span class="mono">notification-service</span><span>Reacts to order outcomes and logs customer messages.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <span class="eyebrow">See it run</span>
+    <h2>Try it yourself</h2>
+    <pre>docker compose up -d --build   # Kafka, Postgres, Jaeger and the four services
+scripts/demo.sh                # runs every scenario above and checks the results</pre>
+    <p class="caption">While it runs, open Kafka UI at localhost:8090 to watch events land on the topics, and Jaeger at localhost:16686 to follow one order across all four services.</p>
+  </section>
+</main>
+</body>
+</html>

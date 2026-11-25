@@ -72,6 +72,8 @@ Seed products: `SKU-LAPTOP` (10), `SKU-PHONE` (25), `SKU-HEADPHONES` (100), `SKU
 
 ## 2. Architecture
 
+> Prefer pictures? Open [`docs/order-flow.html`](docs/order-flow.html) in a browser for diagrams of the architecture, the happy path, failure compensation and the outbox plumbing.
+
 ```
             REST                      order-events                       inventory-events                   payment-events
  client ───────────► ORDER ──────────────────────────────► INVENTORY ───────────────────────────► PAYMENT ─────────────────┐
