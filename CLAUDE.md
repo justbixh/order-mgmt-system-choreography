@@ -7,6 +7,7 @@ Event-driven order management: four Spring Boot 4.1 / Java 21 services (order, i
 ## Commands
 
 ```bash
+cp .env.example .env                                   # optional: override ports/endpoints (defaults work without it)
 docker compose up -d postgres kafka kafka-ui jaeger   # infra only (to run services from the IDE)
 docker compose up -d --build                           # infra + all four services
 # No parent/aggregator pom: every module is a standalone Maven project (parent = spring-boot-starter-parent).
@@ -39,5 +40,6 @@ Integration tests are plain JUnit tests named `*IntegrationTest`; they run in th
 - The shell used here may have `noclobber` set: use `>|` to overwrite files from scripts. `rm` is aliased to `trash` (rejects `-rf`); use `/bin/rm`.
 - Consumer group id = service name (`order-service`, etc.); topics `order-events`, `inventory-events`, `payment-events` (3 partitions, keyed by orderId) plus `<topic>.DLT` (1 partition) are created at startup by `NewTopic` beans in `MessagingAutoConfiguration`, not by Compose. Ports: services 8081-8084, Kafka 9092 (host) / 29092 (containers), Postgres 5432, Kafka UI 8090, Jaeger 16686.
 - Each service's DB user/password equals its database name (`orders`, `inventory`, `payments`, `notifications`), created by `infra/init-databases.sh` only when the Postgres volume is first created.
+- Ports and service endpoints are compose variables with defaults; copy `.env.example` to `.env` (gitignored) to override. DB credentials stay hardcoded (local dev only).
 - Jaeger only ingests traces. Compose points trace export at `http://jaeger:4318/v1/traces` and disables OTLP metrics export (`MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED=false`); otherwise the meter registry logs `Failed to publish metrics to OTLP receiver` (ConnectException to `localhost:4318`) on every interval.
 - Mock payment gateway behaviour is chosen by the order's `paymentMethod` token (`tok_success`, `tok_declined`, `tok_insufficient_funds`, `tok_gateway_error`).

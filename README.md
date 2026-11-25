@@ -19,6 +19,7 @@ and reacting to events on Apache Kafka.
 Prerequisites: Docker (with Compose v2), `curl` and `jq` for the demo script.
 
 ```bash
+cp .env.example .env                  # optional: only needed to override ports or endpoints (all have defaults)
 docker compose up -d --build          # infra + all four services (first build takes a few minutes)
 scripts/demo.sh                       # runs every scenario and checks the results
 ```
@@ -295,5 +296,17 @@ defaults live in `messaging-support/src/main/resources/messaging-defaults.yml`.
 | `INVENTORY_RESERVATION_TTL` | `2m` | Unpaid reservations expire after this |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | `http://localhost:4318/v1/traces` | Trace exporter (Jaeger) |
 | `SPRING_PROFILES_ACTIVE` | | `json-logs` for JSON logging |
+
+### Overriding Compose settings with `.env`
+
+Compose reads a `.env` file next to `docker-compose.yml`. Copy the template to change host ports (for example when 5432 is
+already taken) or service endpoints; every variable has a default, so the file is optional:
+
+```bash
+cp .env.example .env     # .env is gitignored; edit the values you want to change
+docker compose up -d --build
+```
+
+`.env` only affects Compose. Services started from the IDE read your shell or run-configuration environment instead.
 
 Database credentials in this repo are demo values for local use only.

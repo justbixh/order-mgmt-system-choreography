@@ -4,11 +4,12 @@
 name: order-mgmt
 
 x-service-env: &service-env
-  KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-  DB_HOST: postgres
-  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+  KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+  DB_HOST: ${DB_HOST:-postgres}
+  DB_PORT: ${DB_PORT:-5432}
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://jaeger:4318/v1/traces}
   # Jaeger only ingests traces; without this the OTLP meter registry retries localhost:4318 and spams warnings.
-  MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED: "false"
+  MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED: ${MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED:-false}
   SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
 
 services:
@@ -18,7 +19,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql
       - ./infra/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
@@ -60,7 +61,7 @@ services:
       kafka:
         condition: service_healthy
     ports:
-      - "8090:8080"
+      - "${KAFKA_UI_PORT:-8090}:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
@@ -69,31 +70,31 @@ services:
   jaeger:
     image: jaegertracing/jaeger:2.23.0
     ports:
-      - "16686:16686"
+      - "${JAEGER_UI_PORT:-16686}:16686"
       - "4318:4318"
 
   order-service:
     build: { context: ., args: { SERVICE: order-service } }
     depends_on: { postgres: { condition: service_healthy }, kafka: { condition: service_healthy } }
-    ports: ["8081:8081"]
+    ports: ["${ORDER_SERVICE_PORT:-8081}:8081"]
     environment: *service-env
 
   inventory-service:
     build: { context: ., args: { SERVICE: inventory-service } }
     depends_on: { postgres: { condition: service_healthy }, kafka: { condition: service_healthy } }
-    ports: ["8082:8082"]
+    ports: ["${INVENTORY_SERVICE_PORT:-8082}:8082"]
     environment: *service-env
 
   payment-service:
     build: { context: ., args: { SERVICE: payment-service } }
     depends_on: { postgres: { condition: service_healthy }, kafka: { condition: service_healthy } }
-    ports: ["8083:8083"]
+    ports: ["${PAYMENT_SERVICE_PORT:-8083}:8083"]
     environment: *service-env
 
   notification-service:
     build: { context: ., args: { SERVICE: notification-service } }
     depends_on: { postgres: { condition: service_healthy }, kafka: { condition: service_healthy } }
-    ports: ["8084:8084"]
+    ports: ["${NOTIFICATION_SERVICE_PORT:-8084}:8084"]
     environment: *service-env
 
 volumes:
