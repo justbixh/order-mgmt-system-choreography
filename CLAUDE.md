@@ -26,6 +26,8 @@ Integration tests are plain JUnit tests named `*IntegrationTest`; they run in th
 
 ## Architecture (big picture)
 
+Visual walkthrough (services, topics, happy path, compensation, outbox): `docs/order-flow.html`.
+
 - `events-contract`: the wire contract. `EventType` is the registry mapping each event to its topic and payload class; `EventEnvelope.wrap(payload)` builds the envelope. Adding an event = payload record + one `EventType` line.
 - `messaging-support`: auto-configured plumbing used by every service (see `MessagingAutoConfiguration`): `OutboxService` (write event in the business transaction), `OutboxPublisher` (scheduled poll with `FOR UPDATE SKIP LOCKED`, forwards a stored `traceparent` header), `IdempotentEventProcessor` (`processed_events` insert + handler in one transaction), `EventDispatcher` (parse, MDC, idempotency), `KafkaErrorHandlingConfig` (backoff + `.DLT`). Shared defaults come from `messaging-defaults.yml`, imported by each service via `spring.config.import`. Shared tables come from Flyway migration `db/messaging/V0_1__...sql` (service migrations are V1+).
 - `testing-support` (test scope): `ContainersConfig` (Testcontainers Postgres + Kafka via `@ServiceConnection`) and `KafkaTestClient` (`send` raw JSON to a topic, `readUntil` a predicate matches or a timeout) used by every `*IntegrationTest`.
