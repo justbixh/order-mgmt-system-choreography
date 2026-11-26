@@ -91,6 +91,13 @@ pre { margin: 0; background: var(--surface); border: 1px solid var(--line); bord
 .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.tablewrap { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow-x: auto; }
+.cmp { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14px; }
+.cmp th, .cmp td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.cmp tr:last-child td { border-bottom: 0; }
+.cmp th { font-family: var(--font-head); font-size: 13px; color: var(--muted); font-weight: 600; background: color-mix(in srgb, var(--muted) 7%, var(--surface)); }
+.cmp td:first-child { font-weight: 600; width: 18%; }
+svg .note.bad { fill: var(--bad); }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 </style>
 </head>
@@ -445,7 +452,145 @@ pre { margin: 0; background: var(--surface); border: 1px solid var(--line); bord
     <p class="caption">Business failures such as a declined card never reach the red path. They are published as ordinary events (<code>PaymentFailed</code>) and the handler finishes normally.</p>
   </section>
 
-  <!-- ============================ 5. CODE MAP ============================ -->
+  <!-- ============================ 5. SYNCHRONOUS ALTERNATIVE ============================ -->
+  <section>
+    <span class="eyebrow">Diagram 5 · The alternative: everything is REST</span>
+    <h2>The same order without Kafka</h2>
+    <p>This is a thought experiment, not code in the repo. Without events, the Order Service has to become the boss: it calls Inventory, then Payment, then Notification over HTTP, one after another, and the client waits for the whole chain.</p>
+    <div class="diagram">
+      <svg viewBox="0 0 960 490" role="img" aria-label="Synchronous sequence: the client calls Order, which calls Inventory, Payment and Notification in turn and then answers the client.">
+        <defs>
+          <marker id="y-o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--order)"/></marker>
+          <marker id="y-i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--inv)"/></marker>
+          <marker id="y-p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--pay)"/></marker>
+          <marker id="y-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--notif)"/></marker>
+          <marker id="y-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--muted)"/></marker>
+        </defs>
+
+        <path class="life" d="M100 46 V480"/><path class="life" d="M290 46 V480"/><path class="life" d="M490 46 V480"/><path class="life" d="M690 46 V480"/><path class="life" d="M860 46 V480"/>
+        <g class="m"><rect class="plain" x="45" y="10" width="110" height="36" rx="8"/></g>
+        <text x="100" y="33" text-anchor="middle" class="ttl" style="font-size:14px">Client</text>
+        <g class="o"><rect class="card" x="225" y="10" width="130" height="36" rx="8"/></g>
+        <text x="290" y="33" text-anchor="middle" class="ttl" style="font-size:14px">Order</text>
+        <g class="i"><rect class="card" x="425" y="10" width="130" height="36" rx="8"/></g>
+        <text x="490" y="33" text-anchor="middle" class="ttl" style="font-size:14px">Inventory</text>
+        <g class="p"><rect class="card" x="625" y="10" width="130" height="36" rx="8"/></g>
+        <text x="690" y="33" text-anchor="middle" class="ttl" style="font-size:14px">Payment</text>
+        <g class="n"><rect class="card" x="795" y="10" width="130" height="36" rx="8"/></g>
+        <text x="860" y="33" text-anchor="middle" class="ttl" style="font-size:14px">Notification</text>
+
+        <!-- activation bars: who is busy or blocked -->
+        <g class="m"><rect class="card" x="95" y="90" width="10" height="360" rx="3"/></g>
+        <g class="o"><rect class="card" x="285" y="90" width="10" height="360" rx="3"/></g>
+        <g class="i"><rect class="card" x="485" y="150" width="10" height="40" rx="3"/></g>
+        <g class="p"><rect class="card" x="685" y="250" width="10" height="40" rx="3"/></g>
+        <g class="n"><rect class="card" x="855" y="350" width="10" height="40" rx="3"/></g>
+
+        <path class="arr o" d="M106 90 H283" marker-end="url(#y-o)"/>
+        <text x="195" y="82" text-anchor="middle" class="ev lbl" style="fill:var(--order)">POST /orders</text>
+
+        <path class="arr o" d="M296 150 H483" marker-end="url(#y-o)"/>
+        <text x="390" y="142" text-anchor="middle" class="ev lbl" style="fill:var(--order)">POST /reservations</text>
+        <path class="dash i" d="M484 190 H297" marker-end="url(#y-i)"/>
+        <text x="390" y="182" text-anchor="middle" class="tiny lbl">201 reserved</text>
+
+        <path class="arr o" d="M296 250 H683" marker-end="url(#y-o)"/>
+        <text x="490" y="242" text-anchor="middle" class="ev lbl" style="fill:var(--order)">POST /payments</text>
+        <path class="dash p" d="M684 290 H297" marker-end="url(#y-p)"/>
+        <text x="490" y="282" text-anchor="middle" class="tiny lbl">200 paid</text>
+
+        <path class="arr o" d="M296 350 H853" marker-end="url(#y-o)"/>
+        <text x="575" y="342" text-anchor="middle" class="ev lbl" style="fill:var(--order)">POST /notifications</text>
+        <path class="dash n" d="M854 390 H297" marker-end="url(#y-n)"/>
+        <text x="575" y="382" text-anchor="middle" class="tiny lbl">202 accepted</text>
+
+        <path class="dash o" d="M284 450 H106" marker-end="url(#y-o)"/>
+        <text x="195" y="442" text-anchor="middle" class="ev lbl" style="fill:var(--order)">201 confirmed</text>
+
+        <text x="115" y="250" class="note">The HTTP request stays open</text>
+        <text x="115" y="264" class="note">until every step has finished,</text>
+        <text x="115" y="278" class="note">so latency = sum of all calls.</text>
+        <text x="300" y="412" class="note">If Notification is down, the whole request</text>
+        <text x="300" y="426" class="note">fails, unless the error is ignored.</text>
+      </svg>
+    </div>
+    <p class="caption">Solid arrows are requests, dashed arrows are responses. The tall bars show who is busy or blocked. The Client and Order bars stay open the whole time.</p>
+
+    <h3 style="margin-top:8px">And when payment is declined?</h3>
+    <p>The stock is already reserved, so the Order Service must undo it by calling Inventory again. In the event-driven version this is a reaction to <code>OrderCancelled</code>. Here it is code the caller has to remember to write.</p>
+    <div class="diagram">
+      <svg viewBox="0 0 960 510" role="img" aria-label="Synchronous failure: payment is declined, so Order calls Inventory to release the reservation before answering the client.">
+        <defs>
+          <marker id="z-o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--order)"/></marker>
+          <marker id="z-i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--inv)"/></marker>
+          <marker id="z-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--bad)"/></marker>
+        </defs>
+
+        <path class="life" d="M100 46 V500"/><path class="life" d="M290 46 V500"/><path class="life" d="M490 46 V500"/><path class="life" d="M690 46 V500"/>
+        <g class="m"><rect class="plain" x="45" y="10" width="110" height="36" rx="8"/></g>
+        <text x="100" y="33" text-anchor="middle" class="ttl" style="font-size:14px">Client</text>
+        <g class="o"><rect class="card" x="225" y="10" width="130" height="36" rx="8"/></g>
+        <text x="290" y="33" text-anchor="middle" class="ttl" style="font-size:14px">Order</text>
+        <g class="i"><rect class="card" x="425" y="10" width="130" height="36" rx="8"/></g>
+        <text x="490" y="33" text-anchor="middle" class="ttl" style="font-size:14px">Inventory</text>
+        <g class="p"><rect class="card" x="625" y="10" width="130" height="36" rx="8"/></g>
+        <text x="690" y="33" text-anchor="middle" class="ttl" style="font-size:14px">Payment</text>
+
+        <g class="m"><rect class="card" x="95" y="90" width="10" height="360" rx="3"/></g>
+        <g class="o"><rect class="card" x="285" y="90" width="10" height="360" rx="3"/></g>
+        <g class="i"><rect class="card" x="485" y="150" width="10" height="40" rx="3"/></g>
+        <g class="p"><rect class="card" x="685" y="250" width="10" height="40" rx="3"/></g>
+        <g class="i"><rect class="card" x="485" y="350" width="10" height="40" rx="3"/></g>
+
+        <path class="arr o" d="M106 90 H283" marker-end="url(#z-o)"/>
+        <text x="195" y="82" text-anchor="middle" class="ev lbl" style="fill:var(--order)">POST /orders</text>
+
+        <path class="arr o" d="M296 150 H483" marker-end="url(#z-o)"/>
+        <text x="390" y="142" text-anchor="middle" class="ev lbl" style="fill:var(--order)">POST /reservations</text>
+        <path class="dash i" d="M484 190 H297" marker-end="url(#z-i)"/>
+        <text x="390" y="182" text-anchor="middle" class="tiny lbl">201 reserved</text>
+
+        <path class="arr o" d="M296 250 H683" marker-end="url(#z-o)"/>
+        <text x="490" y="242" text-anchor="middle" class="ev lbl" style="fill:var(--order)">POST /payments</text>
+        <path class="dash b" d="M684 290 H297" marker-end="url(#z-b)"/>
+        <text x="490" y="282" text-anchor="middle" class="ev lbl" style="fill:var(--bad)">402 declined</text>
+
+        <path class="arr b" d="M296 350 H483" marker-end="url(#z-b)"/>
+        <text x="390" y="342" text-anchor="middle" class="ev lbl" style="fill:var(--bad)">DELETE /reservations/{id}</text>
+        <path class="dash i" d="M484 390 H297" marker-end="url(#z-i)"/>
+        <text x="390" y="382" text-anchor="middle" class="tiny lbl">204 released</text>
+
+        <path class="dash b" d="M284 450 H106" marker-end="url(#z-b)"/>
+        <text x="195" y="442" text-anchor="middle" class="ev lbl" style="fill:var(--bad)">402 payment declined</text>
+
+        <text x="115" y="250" class="note">The client only hears back</text>
+        <text x="115" y="264" class="note">after the undo has finished.</text>
+        <text x="505" y="422" class="note bad">Compensation is now the Order Service's job.</text>
+        <text x="505" y="436" class="note bad">If it crashes before this call, or the call fails,</text>
+        <text x="505" y="450" class="note bad">the stock stays reserved and nothing retries it.</text>
+      </svg>
+    </div>
+    <p class="caption">The worse case is a timeout from Payment: the Order Service cannot tell whether the card was charged. Handling that safely needs retries with idempotency keys, which is exactly what the outbox and idempotent consumer in Diagram 4 provide for free.</p>
+
+    <h3 style="margin-top:8px">Side by side</h3>
+    <div class="tablewrap">
+      <table class="cmp">
+        <thead><tr><th>Question</th><th>Synchronous REST</th><th>Event-driven (this repo)</th></tr></thead>
+        <tbody>
+          <tr><td>Who coordinates?</td><td>The Order Service calls every step in turn.</td><td>Nobody. Each service reacts to events.</td></tr>
+          <tr><td>Coupling</td><td>Order must know every other service's URL and API, and all of them must be up.</td><td>Services share only the event contract.</td></tr>
+          <tr><td>What the client gets</td><td>One final answer: confirmed or failed.</td><td>The order is accepted straight away and its final status appears a moment later.</td></tr>
+          <tr><td>A service is down</td><td>The request fails or hangs. The caller decides whether to retry or give up.</td><td>Events wait in Kafka and the service catches up when it returns.</td></tr>
+          <tr><td>Undoing work</td><td>Hand-written rollback calls, which can fail too.</td><td>Compensating events, delivered by the same machinery.</td></tr>
+          <tr><td>Adding a new consumer</td><td>Change the Order Service to call it.</td><td>Subscribe to a topic. The producer does not change.</td></tr>
+          <tr><td>Debugging</td><td>Easy: one request, one stack trace.</td><td>Harder: the story is spread over services and topics, which is why Jaeger is in the stack.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="callout"><b>Neither is free.</b> A synchronous design is simpler to build and to follow, and it is a sound choice for a small system where everything is deployed together. Event-driven buys independence and resilience, and you pay for it in extra moving parts (Kafka, the outbox, idempotency) and in eventual consistency.</p>
+  </section>
+
+  <!-- ============================ 6. CODE MAP ============================ -->
   <section>
     <span class="eyebrow">Where to look in the repo</span>
     <h2>Seven standalone Maven modules</h2>
