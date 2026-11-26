@@ -12,6 +12,13 @@ and reacting to events on Apache Kafka.
 > Java 21 is used instead of 17 because it is the current LTS and the Boot 4 baseline recommendation;
 > the code uses pattern matching for `switch` (Java 21).
 
+> **Coordination style: choreography.** No service is in charge of an order. Each service reacts to events
+> published by the others and decides its own next step; the flow exists only as the sum of those reactions.
+> The alternative, *orchestration*, has one service that owns the flow, sends commands to the others and waits
+> for their replies. Quick test: **events are past-tense facts** (`OrderCreated`, `PaymentFailed`), **commands
+> are imperatives** (`ReserveStock`, `ChargePayment`). This repo has events only. Details in
+> [section 2](#the-saga-choreography), rules for changing it in [section 8](#8-keeping-it-a-choreography).
+
 ---
 
 ## 1. Run it in 3 minutes
@@ -96,6 +103,18 @@ distributed transaction (2PC). Instead each service performs a **local** transac
 event; the next service reacts to it. If a step fails, **compensating** actions undo the earlier ones.
 
 This system uses **choreography**: no central coordinator, every service just reacts to events.
+
+**Choreography vs orchestration in 30 seconds**
+
+| | Choreography (this repo) | Orchestration (not used here) |
+|---|---|---|
+| Who decides the next step? | Each service, by reacting to events | One orchestrator service |
+| What travels between services? | Events: facts about the past (`OrderCreated`) | Commands: instructions (`ReserveStock`) and replies |
+| Where does the flow live? | Spread across all services (follow it through the events) | In one place (a state machine) |
+| Undo on failure | Whoever holds something reacts to `OrderCancelled` | The orchestrator sends explicit undo commands |
+
+Pictures of both styles, over Kafka and over REST, are in [`docs/order-flow.html`](docs/order-flow.html): Part 1
+shows how this system works, Part 2 compares the alternatives (open it locally in a browser).
 
 **Happy path**
 ```
@@ -312,3 +331,24 @@ docker compose up -d --build
 `.env` only affects Compose. Services started from the IDE read your shell or run-configuration environment instead.
 
 Database credentials in this repo are demo values for local use only.
+
+## 8. Keeping it a choreography
+
+This system is deliberately a choreography, so anyone changing the flow keeps it that way or says clearly that
+they are not.
+
+Rules:
+
+1. Events are **past-tense facts** (`InventoryReserved`), never instructions (`ReserveInventory`).
+2. A producer never knows or names its consumers. Adding a consumer must not change the producer.
+3. No service calls another service's API (REST or otherwise) as part of the order flow.
+4. No command topics and no reply topics. Services publish to their own `*-events` topic only.
+5. Undo happens through the single compensation trigger, `OrderCancelled`.
+
+**Label every flow change.** Any change that adds or alters an event, a listener or a handler states, in its
+commit or pull request description, one of:
+
+* `Coordination: choreography` (the change follows the rules above), or
+* `Coordination: orchestration (reason)` (the change deliberately departs from them, with the reason).
+
+A change that alters the flow also updates `docs/order-flow.html` and keeps its "Choreography" labels accurate.

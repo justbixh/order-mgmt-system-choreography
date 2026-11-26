@@ -34,6 +34,10 @@ import org.springframework.stereotype.Component;
  * </pre>
  * Nobody tells the services what to do; each one reacts to the events it cares about.
  *
+ * <p><strong>Coordination style: choreography.</strong> Despite the word "saga" in the name this is not an
+ * orchestrator: it sends no commands and does not drive the other services, it only reacts to events. See
+ * "Keeping it a choreography" in the README.
+ *
  * <p>Handlers run inside the transaction opened by the idempotent event processor, so the status
  * change and the follow-up event are committed atomically (outbox).
  *

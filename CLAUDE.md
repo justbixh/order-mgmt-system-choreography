@@ -35,6 +35,15 @@ Visual walkthrough (services, topics, happy path, compensation, outbox): `docs/o
 - Saga: Order publishes `OrderCreated` → Inventory `InventoryReserved`/`...Failed` → Payment `PaymentSucceeded`/`PaymentFailed` → Order confirms or cancels. `OrderCancelled` is the single compensation trigger (Inventory releases, Payment refunds). Handlers must tolerate duplicate, late and cross-topic out-of-order events (check current status first).
 - Business failures (decline, out of stock) are events; technical failures (gateway outage) are exceptions that go through retry then DLT.
 
+## Keeping it a choreography
+
+This repo is a saga **choreography** on purpose: nobody coordinates, services react to events. Do not turn it into an orchestration by accident.
+
+- Events are past-tense facts (`InventoryReserved`), never commands (`ReserveInventory`). No command or reply topics; each service publishes only to its own `*-events` topic.
+- A producer never knows its consumers, and no service calls another service's API in the order flow.
+- Undo goes through `OrderCancelled` only.
+- Label every change that adds or alters an event, listener or handler with `Coordination: choreography` or `Coordination: orchestration (reason)` in the commit message. If the flow changes, update `docs/order-flow.html` (Part 1 describes the system; Part 2 is the hypothetical comparison) and keep its "Choreography" labels accurate.
+
 ## Gotchas
 
 - Spring Boot 4 / Jackson 3: JSON classes are `tools.jackson.*` (`JsonMapper`, `asString()`), test annotations live in new packages (e.g. `org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc`).

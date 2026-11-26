@@ -13,7 +13,12 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
-/** Kafka consumer of the Notification Service: listens to the final outcomes on the order topic. */
+/**
+ * Kafka consumer of the Notification Service: listens to the final outcomes on the order topic.
+ *
+ * <p><strong>Coordination style: choreography.</strong> This class only reacts to events; it never
+ * sends a command to another service. See "Keeping it a choreography" in the README.
+ */
 @Component
 public class NotificationEventListener {
 

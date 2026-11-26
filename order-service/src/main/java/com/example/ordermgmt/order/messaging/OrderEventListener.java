@@ -12,6 +12,9 @@ import org.springframework.stereotype.Component;
 /**
  * Kafka consumer of the Order Service. Listens to the inventory and payment topics.
  *
+ * <p><strong>Coordination style: choreography.</strong> This class only reacts to events; it never
+ * sends a command to another service. See "Keeping it a choreography" in the README.
+ *
  * <h2>Manual acknowledgement</h2>
  * Kafka tracks, per consumer group and partition, an <em>offset</em>: "everything before this has
  * been handled". The container is configured with {@code ack-mode: manual}, so the offset is only

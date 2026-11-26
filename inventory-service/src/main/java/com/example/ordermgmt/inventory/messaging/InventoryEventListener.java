@@ -18,6 +18,9 @@ import org.springframework.stereotype.Component;
  * Kafka consumer of the Inventory Service. Listens to order events (to reserve and release) and
  * payment events (to commit). See {@code OrderEventListener} in the Order Service for how manual
  * acknowledgement and retries work; the mechanics are identical.
+ *
+ * <p><strong>Coordination style: choreography.</strong> This class only reacts to events; it never
+ * sends a command to another service. See "Keeping it a choreography" in the README.
  */
 @Component
 public class InventoryEventListener {

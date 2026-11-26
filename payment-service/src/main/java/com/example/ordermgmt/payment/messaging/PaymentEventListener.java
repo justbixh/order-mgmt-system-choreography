@@ -16,6 +16,9 @@ import org.springframework.stereotype.Component;
 /**
  * Kafka consumer of the Payment Service. Listens to inventory events (to charge) and order events
  * (to refund on cancellation).
+ *
+ * <p><strong>Coordination style: choreography.</strong> This class only reacts to events; it never
+ * sends a command to another service. See "Keeping it a choreography" in the README.
  */
 @Component
 public class PaymentEventListener {
